@@ -4,12 +4,12 @@ local Request = {}
 local uv = vim.loop
 
 -- Capture the text content of OpenAI JSON data response chunks.
-local content_expr = ',*{"text":%s*"([^,]+[^%]"]*[^"]*)",'
+local content_expr = ',*{"text":%s*"([^",]*[^%"]*[^"]*)",'
 -- Capture the error message of an OpenAI JSON error response.
 local error_message_expr = '"message": "(.[^"]*)'
 -- Wrap content from long text responses.
 -- TODO: Fix this, use in syncWrite and make it configurable.
-local wrap_len = 80
+-- local wrap_len = 80
 
 function Request.post(endpoint, body, api_key, buffer_info, on_complete)
     local cmd = 'curl'
@@ -58,9 +58,18 @@ function Request.post(endpoint, body, api_key, buffer_info, on_complete)
         for data_chunk in string.gmatch(data, content_expr) do
             -- Reset newline chunk.
             newline_chunk = false
-            -- Parse escaped quotes.
-            data_chunk = string.gsub(data_chunk, '\\"', '\"')
-            data_chunk = string.gsub(data_chunk, "\\'", "'")
+            -- Parse escape sequence characters
+            data_chunk = string.gsub(data_chunk, "\\\\([0-7]{1,3}|[abfnrtv\\'\"])", {
+              ["a"] = "\a",
+              ["b"] = "\b",
+              ["f"] = "\f",
+              ["n"] = "\n",
+              ["r"] = "\r",
+              ["t"] = "\t",
+              ["v"] = "\v",
+              ["\\'"] = "'",
+              ["\\\""] = "\"",
+            })
 
             -- Add new lines from the output stream chunk.
             for _ in string.gmatch(data_chunk, '\\n') do
@@ -83,10 +92,12 @@ function Request.post(endpoint, body, api_key, buffer_info, on_complete)
                 start_col = start_col + len
                 end_col = end_col + len
 
+                -- TODO: Fix this to use just for text output.
                 -- Wrap token chunk to new line after exceeding limit.
-                if current_line_len >= wrap_len then
-                    buffer_new_line()
-                end
+                -- if current_line_len >= wrap_len then
+                --     -- XXX: This can break code output sometimes!
+                --     -- buffer_new_line()
+                -- end
             end
         end
     end
